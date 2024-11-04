@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useFormik } from "formik";
+import * as Yup from "yup";
 import ReportAPI from "../api/report";
 import FileUpload, { useFileUpload } from "../components/FileUpload";
 
@@ -10,82 +12,57 @@ export const reportCategories = [
   "Something else",
 ];
 
-const defaultFormData = {
-  category: "",
-  senderName: "",
-  senderAge: "",
-  description: "",
-};
-
 const CreateReport = () => {
   const navigate = useNavigate();
   const { handleFileChange, files, fileError } = useFileUpload();
 
-  const [formData, setFormData] = useState(defaultFormData);
-  const [errors, setErrors] = useState(defaultFormData);
   const [expandForm, setExpandForm] = useState(false);
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement
-    >
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    if (errors[name as keyof typeof errors]) {
-      setErrors((prevErrors) => ({
-        ...prevErrors,
-        [name]: "",
-      }));
-    }
-  };
-
-  const validateForm = () => {
-    const newErrors = {
-      ...defaultFormData,
-    };
-    if (!formData.senderName) newErrors.senderName = "Name is required";
-    if (!formData.hasOwnProperty("senderAge"))
-      newErrors.senderAge = "Age is required";
-    setErrors(newErrors);
-    return Object.values(newErrors).every((value) => !value);
-  };
-
-  const sendReport = async () => {
-    if (validateForm()) {
+  const formik = useFormik({
+    initialValues: {
+      category: "",
+      senderName: "",
+      senderAge: "",
+      description: "",
+    },
+    validationSchema: Yup.object({
+      category: Yup.string().required("Category is required"),
+      senderName: Yup.string().required("Name is required"),
+      senderAge: Yup.number().required("Age is required").positive().integer(),
+      description: Yup.string(),
+    }),
+    onSubmit: async (values) => {
       try {
-        const { senderAge, ...rest } = formData;
         await ReportAPI.createReport({
-          ...rest,
-          senderAge: Number(senderAge),
+          ...values,
+          senderAge: Number(values.senderAge),
           files,
         });
+        navigate("/sent", { state: { fromSource: true } });
       } catch (error) {
         console.error("Error when sending a report", error);
       }
-      navigate("/sent", { state: { fromSource: true } });
-    }
-  };
+    },
+  });
 
   return (
     <div className="flex flex-col items-center">
       <h2 className="text-5xl font-bold mt-12 text-center">New report</h2>
 
-      <form className="form-control w-full max-w-3xl mt-6">
+      <form
+        className="form-control w-full max-w-3xl mt-6"
+        onSubmit={formik.handleSubmit}
+      >
         <div className="label">
           <span className="label-text text-xl font-bold">
             Category <span className="text-red-500">*</span>
           </span>
         </div>
         <select
-          value={formData.category}
-          onChange={handleChange}
-          className="select select-info w-full text-xl"
           name="category"
+          className="select select-info w-full text-xl"
+          onChange={formik.handleChange}
+          value={formik.values.category}
         >
           <option disabled value="">
             Select one
@@ -96,6 +73,13 @@ const CreateReport = () => {
             </option>
           ))}
         </select>
+        {formik.errors.category && (
+          <div className="label">
+            <span className="label-text-alt text-red-500 text-xl">
+              {formik.errors.category}
+            </span>
+          </div>
+        )}
 
         {expandForm && (
           <>
@@ -105,17 +89,16 @@ const CreateReport = () => {
               </span>
             </div>
             <input
-              required
               name="senderName"
               type="text"
               className="input input-bordered input-info text-xl w-full max-w-3xl"
-              value={formData.senderName}
-              onChange={handleChange}
+              onChange={formik.handleChange}
+              value={formik.values.senderName}
             />
-            {errors.senderName && (
+            {formik.errors.senderName && (
               <div className="label">
                 <span className="label-text-alt text-red-500 text-xl">
-                  {errors.senderName}
+                  {formik.errors.senderName}
                 </span>
               </div>
             )}
@@ -126,17 +109,16 @@ const CreateReport = () => {
               </span>
             </div>
             <input
-              required
               name="senderAge"
               type="number"
-              value={formData.senderAge}
-              onChange={handleChange}
               className="input input-bordered input-info text-xl w-full max-w-3xl"
+              onChange={formik.handleChange}
+              value={formik.values.senderAge}
             />
-            {errors.senderAge && (
+            {formik.errors.senderAge && (
               <div className="label">
                 <span className="label-text-alt text-red-500 text-xl">
-                  {errors.senderAge}
+                  {formik.errors.senderAge}
                 </span>
               </div>
             )}
@@ -151,8 +133,8 @@ const CreateReport = () => {
               name="description"
               placeholder="Please provide as much detail as possible..."
               rows={6}
-              value={formData.description}
-              onChange={handleChange}
+              onChange={formik.handleChange}
+              value={formik.values.description}
             ></textarea>
             <FileUpload
               className="mt-6"
@@ -161,25 +143,25 @@ const CreateReport = () => {
             />
           </>
         )}
+        {!expandForm ? (
+          <button
+            className={`${
+              !formik.values.category ? "btn-disabled opacity-50" : ""
+            } mt-6 w-full p-4 max-w-screen-md bg-lightblue hover:bg-darkblue text-white font-bold text-xl rounded-lg`}
+            onClick={() => setExpandForm(true)}
+            disabled={!formik.values.category}
+          >
+            <span>Continue</span>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="mt-6 w-full p-4 max-w-screen-md bg-lightblue hover:bg-darkblue text-white font-bold text-xl rounded-lg"
+          >
+            <span>Send</span>
+          </button>
+        )}
       </form>
-
-      {!expandForm ? (
-        <button
-          className={`${
-            !formData.category ? "btn-disabled opacity-50" : ""
-          } mt-6 w-full p-4 max-w-screen-md bg-lightblue hover:bg-darkblue text-white font-bold text-xl rounded-lg`}
-          onClick={() => setExpandForm(true)}
-        >
-          <span>Continue</span>
-        </button>
-      ) : (
-        <button
-          className="mt-6 w-full p-4 max-w-screen-md bg-lightblue hover:bg-darkblue text-white font-bold text-xl rounded-lg"
-          onClick={() => sendReport()}
-        >
-          <span>Send</span>
-        </button>
-      )}
     </div>
   );
 };
